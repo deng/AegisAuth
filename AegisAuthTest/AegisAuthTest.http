@@ -1,0 +1,6 @@
+@AegisAuthTest_HostAddress = http://localhost:5263
+
+GET {{AegisAuthTest_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
