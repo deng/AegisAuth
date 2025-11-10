@@ -86,6 +86,13 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Initialize token blacklist from database
+using (var scope = app.Services.CreateScope())
+{
+    var authManager = scope.ServiceProvider.GetRequiredService<AuthManager>();
+    await authManager.InitializeMemoryBlacklistAsync();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

@@ -90,7 +90,28 @@ builder.Services.AddAuthentication(options =>
 });
 ```
 
-### 3. 使用内置的认证控制器
+### 3. 初始化令牌黑名单
+
+在应用程序启动时，需要从数据库加载令牌黑名单到内存中：
+
+```csharp
+var app = builder.Build();
+
+// 初始化令牌黑名单（重要：必须在处理任何请求之前调用）
+using (var scope = app.Services.CreateScope())
+{
+    var authManager = scope.ServiceProvider.GetRequiredService<AuthManager>();
+    await authManager.InitializeMemoryBlacklistAsync();
+}
+
+// 配置中间件管道
+app.UseAuthentication();
+app.UseAuthorization();
+```
+
+**注意：** 如果不调用 `InitializeMemoryBlacklistAsync()`，在验证令牌时会抛出 `InvalidOperationException` 异常。
+
+### 4. 使用内置的认证控制器
 
 该包包含一个即用的 `AuthController`。只需在您的应用程序中注册它：
 
@@ -102,9 +123,9 @@ using AegisAuth.Controllers;
 // 您可以通过继承它来自定义，或直接使用它
 ```
 
-### 4. 或创建自定义认证控制器
+### 5. 配置应用程序设置
 
-如果您希望创建自己的控制器：
+如果您希望创建自定义配置：
 
 ```json
 {
@@ -124,7 +145,81 @@ using AegisAuth.Controllers;
 
 ## API 参考
 
+### AuthController
+
+内置的 REST API 控制器，提供开箱即用的认证端点。
+
+#### POST /api/auth/login
+用户登录端点。
+
+**请求体：**
+```json
+{
+  "userName": "用户名",
+  "password": "密码"
+}
+```
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "用户ID",
+    "userName": "用户名",
+    "token": "访问令牌",
+    "refreshToken": "刷新令牌",
+    "role": "用户角色"
+  },
+  "error": null
+}
+```
+
+#### POST /api/auth/refresh
+刷新访问令牌端点。
+
+**请求体：**
+```json
+{
+  "refreshToken": "刷新令牌"
+}
+```
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "用户ID",
+    "userName": "用户名",
+    "token": "新的访问令牌",
+    "refreshToken": "新的刷新令牌",
+    "role": "用户角色"
+  },
+  "error": null
+}
+```
+
+#### POST /api/auth/logout
+用户登出端点（需要认证）。
+
+**请求头：**
+```
+Authorization: Bearer {访问令牌}
+```
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": true,
+  "error": null
+}
+```
+
 ### AuthManager
+
+核心认证管理器，提供认证逻辑的实现。
 
 #### SignIn(LoginRequest)
 验证用户身份并返回 JWT 令牌。
@@ -153,8 +248,34 @@ using AegisAuth.Controllers;
 #### IsTokenBlacklisted(string)
 检查令牌哈希是否在黑名单中的静态方法。
 
+**参数：**
+- `tokenHash`：令牌的 SHA256 哈希值
+
+**返回：** `bool` - 如果令牌在黑名单中返回 true
+
+**异常：** 如果黑名单未初始化，抛出 `InvalidOperationException`
+
 #### InitializeMemoryBlacklistAsync()
-从数据库初始化内存中的令牌黑名单。
+从数据库加载所有未过期的令牌到内存黑名单中。
+
+**使用场景：**
+- 应用程序启动时必须调用一次
+- 在长时间运行的应用中，可以定期调用以同步数据库状态
+
+**示例：**
+```csharp
+// 在应用启动时
+using (var scope = app.Services.CreateScope())
+{
+    var authManager = scope.ServiceProvider.GetRequiredService<AuthManager>();
+    await authManager.InitializeMemoryBlacklistAsync();
+}
+```
+
+**注意事项：**
+- 此方法会清空现有的内存黑名单并重新加载
+- 操作是线程安全的
+- 会记录安全审计日志
 
 ## 数据库架构
 
