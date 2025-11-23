@@ -1,136 +1,295 @@
 # AegisAuth
 
-一个功能全面的 JWT 认证服务库，为 ASP.NET Core 应用程序提供令牌黑名单和安全审计日志功能。
+一个功能全面的 .NET 认证解决方案，提供 JWT 和 Session 两种认证方式，支持令牌黑名单和安全审计日志功能。
+
+## 项目结构
+
+- **AegisAuth.Core** - 核心共享库（实体、仓储接口、服务）
+- **AegisAuthJwt** - JWT 认证库
+- **AegisAuthSession** - Session 认证库
+- **AegisAuthJwtTest** - JWT 测试项目
+- **AegisAuthSessionTest** - Session 测试项目
 
 ## 特性
 
-- 🔐 **JWT 认证**：支持可配置过期时间的安全令牌认证
-- 🚫 **令牌黑名单**：具有持久化存储的自动令牌失效机制
+### 共同特性
+- 🛡️ **密码安全**：基于 PBKDF2 的密码哈希（100,000 次迭代）
 - 📊 **安全审计日志**：全面记录认证事件
-- 🔄 **令牌刷新**：支持刷新令牌的自动续期
-- 🧹 **自动清理**：后台工作进程自动清理过期令牌
-- 🛡️ **密码安全**：基于 PBKDF2 的密码哈希加盐
-- 🌐 **ASP.NET Core 集成**：与 ASP.NET Core 应用程序无缝集成
-- 🎯 **即用控制器**：内置 AuthController 可直接使用
+- 🔒 **账户锁定**：5 次失败尝试后锁定 30 分钟
+- 🌐 **ASP.NET Core 集成**：无缝集成到 ASP.NET Core 应用
+- 🎯 **即用控制器**：内置控制器可直接使用
 
-## 安装
+### AegisAuthJwt 特性
+- 🔐 **JWT 认证**：标准 JWT 令牌认证
+- 🚫 **令牌黑名单**：自动令牌失效机制
+- 🔄 **令牌刷新**：自动续期支持
+- 🧹 **自动清理**：后台清理过期令牌
 
-```bash
-dotnet add package AegisAuth
-```
+### AegisAuthSession 特性
+- 🔑 **Session 认证**：基于 Session ID 的认证
+- 💾 **多种存储**：支持内存、Redis、数据库存储
+- ⏰ **滑动过期**：自动延长活跃 Session
+- 🔄 **Session 续期**：接近过期时自动续期
+- 🛡️ **Session 固定攻击保护**：防止 Session 劫持
+- 🧹 **后台清理**：定期清理过期 Session
+- 📱 **多设备管理**：限制每用户最大 Session 数
 
 ## 快速开始
 
-### 1. 配置服务
+### AegisAuthJwt（JWT 认证）
 
+详细文档请查看：[AegisAuthJwt README](AegisAuthJwt/README.md)
+
+**安装：**
+```bash
+dotnet add package AegisAuthJwt
+```
+
+**基础配置：**
 ```csharp
-using AegisAuth;
-using AegisAuth.Entities;
-using AegisAuth.Repositories;
-using AegisAuth.Services;
-using AegisAuth.Settings;
-using AegisAuth.Workers;
-
-// 在 Program.cs 或 Startup.cs 中
+// 注册仓储
 builder.Services.AddScoped<IUserRepository, YourUserRepository>();
-builder.Services.AddScoped<ISecurityAuditLogRepository, YourSecurityAuditLogRepository>();
+builder.Services.AddScoped<ISecurityAuditLogRepository, YourAuditLogRepository>();
 builder.Services.AddScoped<ITokenBlacklistRepository, YourTokenBlacklistRepository>();
 
-builder.Services.AddScoped<AuthManager>();
-builder.Services.AddScoped<IHttpContextAccessorService, HttpContextAccessorService>();
-
-// 配置设置
+// 配置 JWT 认证
 builder.Services.Configure<AuthSetting>(builder.Configuration.GetSection("AuthSetting"));
+builder.Services.AddScoped<AuthManager>();
 
-// 添加令牌清理后台工作进程
-builder.Services.Configure<TokenCleanupWorkerOptions>(
-    builder.Configuration.GetSection("TokenCleanupWorker"));
-builder.Services.AddHostedService<TokenCleanupWorker>();
+// 配置 JWT 中间件
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(/* 配置选项 */);
 ```
 
-### 2. 配置认证中间件
+### AegisAuthSession（Session 认证）
 
+详细文档请查看：[AegisAuthSession QUICKSTART](AegisAuthSession/QUICKSTART.md)
+
+**安装：**
+```bash
+dotnet add package AegisAuthSession
+```
+
+**快速配置（三种方式）：**
+
+1. **内存存储（开发/测试）**
 ```csharp
-// 添加 JWT 认证
-builder.Services.AddAuthentication(options =>
+builder.Services.AddScoped<IUserRepository, YourUserRepository>();
+builder.Services.AddScoped<ISecurityAuditLogRepository, YourAuditLogRepository>();
+
+builder.Services.AddAegisAuthSessionWithMemory(settings =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    var authSetting = builder.Configuration.GetSection("AuthSetting").Get<AuthSetting>();
-
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidIssuer = authSetting.JwtTokenIssuer,
-        ValidateAudience = true,
-        ValidAudience = authSetting.JwtTokenAudience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authSetting.JwtTokenKey)),
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero
-    };
-
-    // 添加令牌黑名单验证
-    options.Events = new JwtBearerEvents
-    {
-        OnTokenValidated = async context =>
-        {
-            var token = context.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-            var tokenHash = AuthManager.ComputeTokenHash(token);
-
-            if (AuthManager.IsTokenBlacklisted(tokenHash))
-            {
-                context.Fail("Token has been revoked");
-            }
-        }
-    };
+    settings.SessionExpirationMinutes = 30;
+    settings.MaxSessionsPerUser = 5;
 });
+
+app.UseAegisAuthSession();
 ```
 
-### 3. 初始化令牌黑名单
-
-在应用程序启动时，需要从数据库加载令牌黑名单到内存中：
-
+2. **Redis 存储（生产推荐）**
 ```csharp
-var app = builder.Build();
-
-// 初始化令牌黑名单（重要：必须在处理任何请求之前调用）
-using (var scope = app.Services.CreateScope())
+builder.Services.AddStackExchangeRedisCache(options =>
 {
-    var authManager = scope.ServiceProvider.GetRequiredService<AuthManager>();
-    await authManager.InitializeMemoryBlacklistAsync();
-}
+    options.Configuration = "localhost:6379";
+    options.InstanceName = "AegisAuth:";
+});
+builder.Services.AddAegisAuthSessionWithRedis();
 
-// 配置中间件管道
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseAegisAuthSession();
 ```
 
-**注意：** 如果不调用 `InitializeMemoryBlacklistAsync()`，在验证令牌时会抛出 `InvalidOperationException` 异常。
-
-### 4. 使用内置的认证控制器
-
-该包包含一个即用的 `AuthController`。只需在您的应用程序中注册它：
-
+3. **数据库存储**
 ```csharp
-// 在 Program.cs 中
-using AegisAuth.Controllers;
+builder.Services.AddDbContext<YourDbContext>(/* 配置 */);
+builder.Services.AddScoped<DbContext, YourDbContext>();
+builder.Services.AddAegisAuthSessionWithDatabase();
 
-// 添加该包后，AuthController 会自动可用
-// 您可以通过继承它来自定义，或直接使用它
+app.UseAegisAuthSession();
 ```
 
-### 5. 配置应用程序设置
+## 认证方式对比
 
-如果您希望创建自定义配置：
+| 特性 | AegisAuthJwt | AegisAuthSession |
+|------|--------------|------------------|
+| **认证机制** | JWT Token | Session ID |
+| **状态管理** | 无状态 | 有状态 |
+| **存储方式** | 客户端（Token） | 服务端（Session Store） |
+| **扩展性** | 易于水平扩展 | 需要共享存储（Redis/数据库） |
+| **性能** | 无需查询存储 | 每次请求需查询存储 |
+| **撤销支持** | 需要黑名单机制 | 直接删除 Session |
+| **适用场景** | API、微服务、移动应用 | Web 应用、需要即时撤销的场景 |
+| **安全性** | Token 泄露风险较高 | Session ID 泄露风险较低 |
 
+## API 端点
+
+两个库都提供了类似的 REST API 端点：
+
+### 通用端点
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/api/auth/login` | 用户登录 | ❌ |
+| POST | `/api/auth/logout` | 用户登出 | ✅ |
+
+### AegisAuthJwt 特有端点
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/api/auth/refresh` | 刷新 Token | ❌ |
+
+### AegisAuthSession 特有端点
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/api/auth/refresh` | 刷新 Session | ✅ |
+| POST | `/api/auth/logout-all` | 登出所有设备 | ✅ |
+| GET | `/api/auth/info` | 获取 Session 信息 | ✅ |
+| GET | `/api/auth/validate` | 验证 Session | ✅ |
+
+### 请求/响应示例
+
+**登录请求：**
+```json
+{
+  "userName": "testuser",
+  "password": "password123"
+}
+```
+
+**登录响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "1",
+    "userName": "testuser",
+    "token": "eyJhbG...", // JWT: token, Session: sessionId
+    "refreshToken": "refresh_token", // 仅 JWT
+    "role": "Admin"
+  },
+  "error": null
+}
+```
+
+## 数据模型
+
+### 核心实体（AegisAuth.Core）
+
+#### User（用户）
+```csharp
+public class User
+{
+    public string Id { get; set; }
+    public string Username { get; set; }
+    public string PasswordHash { get; set; }
+    public string PasswordSalt { get; set; }
+    public string? Role { get; set; }
+    public bool IsActive { get; set; }
+    public DateTimeOffset? LastLogin { get; set; }
+    public int FailedLoginAttempts { get; set; }
+    public DateTimeOffset? LockoutEnd { get; set; }
+    public DateTimeOffset? PasswordChangedAt { get; set; }
+}
+```
+
+#### SecurityAuditLog（安全审计日志）
+```csharp
+public class SecurityAuditLog
+{
+    public string Id { get; set; }
+    public string UserName { get; set; }
+    public SecurityEventType EventType { get; set; }
+    public string EventDescription { get; set; }
+    public SecurityEventResult Result { get; set; }
+    public string? Details { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+```
+
+### JWT 特有实体
+
+#### TokenBlacklist（令牌黑名单）
+```csharp
+public class TokenBlacklist
+{
+    public string Id { get; set; }
+    public string TokenHash { get; set; }
+    public int TokenLength { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public string? UserId { get; set; }
+    public string? UserName { get; set; }
+    public string? RevocationReason { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+}
+```
+
+### Session 特有实体
+
+#### Session（会话）
+```csharp
+public class Session
+{
+    public string Id { get; set; }
+    public string UserId { get; set; }
+    public string UserName { get; set; }
+    public string? Role { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset LastAccessedAt { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+}
+```
+
+### 仓储接口
+
+您需要实现以下仓储接口：
+
+**所有项目都需要：**
+- `IUserRepository`
+- `ISecurityAuditLogRepository`
+
+**AegisAuthJwt 额外需要：**
+- `ITokenBlacklistRepository`
+
+**AegisAuthSession 不需要额外仓储**（使用 `ISessionStore`）
+
+## 安全特性
+
+### 密码安全
+- ✅ PBKDF2 哈希算法
+- ✅ 100,000 次迭代
+- ✅ 随机盐值
+- ✅ SHA256 密码哈希
+
+### 账户保护
+- ✅ 失败登录计数（5 次后锁定）
+- ✅ 账户锁定（30 分钟）
+- ✅ 密码修改追踪
+- ✅ 账户激活状态
+
+### 会话安全（AegisAuthSession）
+- ✅ Session 固定攻击保护
+- ✅ 滑动过期时间
+- ✅ 多设备管理
+- ✅ 强制登出所有设备
+
+### 审计与监控
+- ✅ 全面的安全审计日志
+- ✅ IP 地址追踪
+- ✅ User-Agent 记录
+- ✅ 事件类型分类
+
+## 配置示例
+
+### JWT 配置（appsettings.json）
 ```json
 {
   "AuthSetting": {
-    "JwtTokenKey": "your-256-bit-secret-key-here",
+    "JwtTokenKey": "your-256-bit-secret-key-here-minimum-32-characters",
     "JwtTokenIssuer": "https://yourdomain.com",
     "JwtTokenAudience": "https://yourdomain.com",
     "AccessTokenExpirationMinutes": 60,
@@ -143,194 +302,56 @@ using AegisAuth.Controllers;
 }
 ```
 
-## API 参考
-
-### AuthController
-
-内置的 REST API 控制器，提供开箱即用的认证端点。
-
-#### POST /api/auth/login
-用户登录端点。
-
-**请求体：**
+### Session 配置（appsettings.json）
 ```json
 {
-  "userName": "用户名",
-  "password": "密码"
-}
-```
-
-**响应：**
-```json
-{
-  "success": true,
-  "data": {
-    "userId": "用户ID",
-    "userName": "用户名",
-    "token": "访问令牌",
-    "refreshToken": "刷新令牌",
-    "role": "用户角色"
+  "SessionSetting": {
+    "SessionExpirationMinutes": 30,
+    "SessionRememberMeExpirationDays": 7,
+    "MaxSessionsPerUser": 5,
+    "SessionIdLength": 64,
+    "SessionCookieName": "AegisAuthSession",
+    "EnableSessionFixationProtection": true,
+    "EnableSlidingExpiration": true,
+    "SessionRenewalMinutes": 10,
+    "CleanupIntervalMinutes": 60
   },
-  "error": null
+  "Redis": {
+    "Configuration": "localhost:6379",
+    "InstanceName": "AegisAuth:"
+  }
 }
 ```
 
-#### POST /api/auth/refresh
-刷新访问令牌端点。
+## 文档
 
-**请求体：**
-```json
-{
-  "refreshToken": "刷新令牌"
-}
+### AegisAuthJwt
+- [完整文档](AegisAuthJwt/README.md)
+
+### AegisAuthSession
+- [快速开始](AegisAuthSession/QUICKSTART.md)
+- [存储实现指南](AegisAuthSession/STORAGE_GUIDE.md)
+
+## 测试项目
+
+两个测试项目提供了完整的使用示例：
+- **AegisAuthJwtTest** - JWT 认证完整示例
+- **AegisAuthSessionTest** - Session 认证完整示例
+
+运行测试项目：
+```bash
+cd AegisAuthJwtTest
+dotnet run
+
+# 或
+cd AegisAuthSessionTest
+dotnet run
 ```
-
-**响应：**
-```json
-{
-  "success": true,
-  "data": {
-    "userId": "用户ID",
-    "userName": "用户名",
-    "token": "新的访问令牌",
-    "refreshToken": "新的刷新令牌",
-    "role": "用户角色"
-  },
-  "error": null
-}
-```
-
-#### POST /api/auth/logout
-用户登出端点（需要认证）。
-
-**请求头：**
-```
-Authorization: Bearer {访问令牌}
-```
-
-**响应：**
-```json
-{
-  "success": true,
-  "data": true,
-  "error": null
-}
-```
-
-### AuthManager
-
-核心认证管理器，提供认证逻辑的实现。
-
-#### SignIn(LoginRequest)
-验证用户身份并返回 JWT 令牌。
-
-**参数：**
-- `request`：包含用户名和密码的 LoginRequest
-
-**返回：** 包含访问令牌和刷新令牌的 `ApiResponse<SignedInUser>`
-
-#### RefreshToken(RefreshTokenRequest)
-使用有效的刷新令牌刷新访问令牌。
-
-**参数：**
-- `request`：包含刷新令牌的 RefreshTokenRequest
-
-**返回：** 包含新令牌的 `ApiResponse<SignedInUser>`
-
-#### Logout()
-通过将当前访问令牌添加到黑名单来使其失效。
-
-**返回：** 指示成功的 `ApiResponse<bool>`
-
-#### ComputeTokenHash(string)
-计算令牌的 SHA256 哈希值的静态方法。
-
-#### IsTokenBlacklisted(string)
-检查令牌哈希是否在黑名单中的静态方法。
-
-**参数：**
-- `tokenHash`：令牌的 SHA256 哈希值
-
-**返回：** `bool` - 如果令牌在黑名单中返回 true
-
-**异常：** 如果黑名单未初始化，抛出 `InvalidOperationException`
-
-#### InitializeMemoryBlacklistAsync()
-从数据库加载所有未过期的令牌到内存黑名单中。
-
-**使用场景：**
-- 应用程序启动时必须调用一次
-- 在长时间运行的应用中，可以定期调用以同步数据库状态
-
-**示例：**
-```csharp
-// 在应用启动时
-using (var scope = app.Services.CreateScope())
-{
-    var authManager = scope.ServiceProvider.GetRequiredService<AuthManager>();
-    await authManager.InitializeMemoryBlacklistAsync();
-}
-```
-
-**注意事项：**
-- 此方法会清空现有的内存黑名单并重新加载
-- 操作是线程安全的
-- 会记录安全审计日志
-
-## 数据库架构
-
-该库需要以下实体：
-
-### User（用户）
-- `Id`: string（主键）
-- `Username`: string（用户名）
-- `PasswordHash`: string（密码哈希）
-- `PasswordSalt`: string（密码盐）
-- `Role`: string?（用户角色，可由使用者自定义，如 "Admin", "User" 等）
-- `IsActive`: bool（是否激活）
-- `LastLogin`: DateTimeOffset?（最后登录时间）
-- `FailedLoginAttempts`: int（失败登录尝试次数）
-- `LockoutEnd`: DateTimeOffset?（锁定结束时间）
-- `PasswordChangedAt`: DateTimeOffset?（密码修改时间）
-
-### TokenBlacklist（令牌黑名单）
-- `Id`: string（主键）
-- `TokenHash`: string（SHA256 哈希）
-- `TokenLength`: int（令牌长度）
-- `ExpiresAt`: DateTime（过期时间）
-- `UserId`: string?（用户 ID）
-- `UserName`: string?（用户名）
-- `RevocationReason`: string?（撤销原因）
-- `IpAddress`: string?（IP 地址）
-- `UserAgent`: string?（用户代理）
-
-### SecurityAuditLog（安全审计日志）
-- `Id`: string（主键）
-- `UserName`: string（用户名）
-- `EventType`: SecurityEventType（事件类型）
-- `EventDescription`: string（事件描述）
-- `Result`: SecurityEventResult（结果）
-- `Details`: string?（详细信息）
-- `IpAddress`: string?（IP 地址）
-- `UserAgent`: string?（用户代理）
-- `CreatedAt`: DateTimeOffset（创建时间）
-
-## 安全功能
-
-- **密码哈希**：使用 PBKDF2 进行 100,000 次迭代并使用随机盐
-- **令牌黑名单**：防止已撤销令牌的重复使用
-- **账户锁定**：登录失败后自动锁定账户
-- **安全审计**：全面记录所有认证事件
-- **IP 追踪**：记录客户端 IP 地址以进行安全监控
-
-## 贡献
-
-欢迎贡献！请随时提交 Pull Request。
 
 ## 许可证
 
-本项目基于 MIT 许可证 - 详见 LICENSE 文件。
+MIT License - 详见 [LICENSE](LICENSE) 文件
 
-## 支持
+## 贡献
 
-如需支持和提问，请在 GitHub 上提交 issue。
+欢迎贡献！请提交 Pull Request 或创建 Issue。
