@@ -1,9 +1,9 @@
 using AegisAuthJwt.Controllers;
-using AegisAuth.Core.Entities;
+using AegisAuthBase.Entities;
 using AegisAuthJwt.Managers;
-using AegisAuth.Core.Repositories;
-using AegisAuth.Core.Services;
-using AegisAuth.Core.Settings;
+using AegisAuthBase.Repositories;
+using AegisAuthBase.Services;
+using AegisAuthBase.Settings;
 using AegisAuthJwt.Workers;
 using AegisAuthJwtTest.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;

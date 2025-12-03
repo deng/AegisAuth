@@ -1,10 +1,9 @@
-using AegisAuth.Core.Repositories;
-using AegisAuth.Core.Entities;
-using AegisAuth.Core.Requests;
-using AegisAuth.Core.Responses;
-using AegisAuth.Core.Services;
-using AegisAuth.Core.Settings;
-using Microsoft.AspNetCore.Http;
+using AegisAuthBase.Repositories;
+using AegisAuthBase.Entities;
+using AegisAuthBase.Requests;
+using AegisAuthBase.Responses;
+using AegisAuthBase.Services;
+using AegisAuthBase.Settings;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -12,6 +11,9 @@ using System.Text;
 
 namespace AegisAuthJwt.Managers;
 
+/// <summary>
+/// JWT 认证管理器
+/// </summary>
 public class AuthManager
 {
     private readonly AuthSetting m_AuthSetting;
@@ -27,6 +29,14 @@ public class AuthManager
     // 标识内存黑名单是否已初始化
     private static bool s_IsBlacklistInitialized = false;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="authSetting">认证设置</param>
+    /// <param name="userRepository">用户仓储</param>
+    /// <param name="securityAuditLogRepository">安全审计日志仓储</param>
+    /// <param name="tokenBlacklistRepository">令牌黑名单仓储</param>
+    /// <param name="httpContextAccessor">HTTP 上下文访问器服务</param>
     public AuthManager(AuthSetting authSetting, IUserRepository userRepository, ISecurityAuditLogRepository securityAuditLogRepository, ITokenBlacklistRepository tokenBlacklistRepository, IHttpContextAccessorService httpContextAccessor)
     {
         m_AuthSetting = authSetting;
@@ -37,6 +47,11 @@ public class AuthManager
         m_PasswordSecurityService = new PasswordSecurityService();
     }
 
+    /// <summary>
+    /// 用户登录
+    /// </summary>
+    /// <param name="request">登录请求</param>
+    /// <returns>登录结果</returns>
     public async Task<ApiResponse<SignedInUser>> SignIn(LoginRequest request)
     {
         // 1. 验证请求参数
@@ -97,10 +112,11 @@ public class AuthManager
         var signedInUser = new SignedInUser
         {
             UserId = user.Id,
-            UserName = user.Username,
+            UserName = user.UserName,
             Token = token,
             RefreshToken = refreshToken,
-            Role = user.Role
+            Role = user.Role,
+            ExpiresAt = DateTimeOffset.Now.AddMinutes(m_AuthSetting.AccessTokenExpirationMinutes)
         };
 
         return new ApiResponse<SignedInUser>
@@ -110,6 +126,78 @@ public class AuthManager
         };
     }
 
+    /// <summary>
+    /// 用户注册
+    /// </summary>
+    /// <param name="request">注册请求</param>
+    /// <returns>注册结果</returns>
+    public async Task<ApiResponse> Register(RegisterRequest request)
+    {
+        // 1. 验证请求参数
+        var validationResult = ValidateRegisterRequest(request);
+        if (!validationResult.isValid)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Error = validationResult.message
+            };
+        }
+
+        // 2. 检查用户名是否已存在
+        var existingUser = await m_UserRepository.GetUserByUserNameAsync(request.UserName);
+        if (existingUser != null)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Error = "用户名已存在"
+            };
+        }
+
+        // 3. 创建新用户
+        var (passwordHash, passwordSalt) = m_PasswordSecurityService.CreatePasswordHash(request.Password);
+        var newUser = new User
+        {
+            UserName = request.UserName,
+            PasswordHash = passwordHash,
+            PasswordSalt = passwordSalt,
+            Role = UserRole.User,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            FailedLoginAttempts = 0,
+            IsLocked = false
+        };
+
+        // 4. 保存用户
+        await m_UserRepository.CreateAsync(newUser);
+        await m_UserRepository.CommitAsync();
+
+        // 5. 记录注册日志
+        await m_SecurityAuditLogRepository.AddAsync(new SecurityAuditLog
+        {
+            UserName = newUser.UserName,
+            EventType = SecurityEventType.SensitiveOperation,
+            EventDescription = "User registered",
+            Details = $"User {newUser.UserName} registered",
+            IpAddress = m_HttpContextAccessor.GetClientIpAddress(),
+            UserAgent = m_HttpContextAccessor.GetUserAgent(),
+            Result = SecurityEventResult.Success,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await m_SecurityAuditLogRepository.CommitAsync();
+
+        return new ApiResponse
+        {
+            Success = true
+        };
+    }
+
+    /// <summary>
+    /// 刷新令牌
+    /// </summary>
+    /// <param name="request">刷新令牌请求</param>
+    /// <returns>刷新结果</returns>
     public async Task<ApiResponse<SignedInUser>> RefreshToken(RefreshTokenRequest request)
     {
         try
@@ -187,14 +275,15 @@ public class AuthManager
             var signedInUser = new SignedInUser
             {
                 UserId = user.Id,
-                UserName = user.Username,
+                UserName = user.UserName,
                 Token = newAccessToken,
                 RefreshToken = newRefreshToken,
-                Role = user.Role
+                Role = user.Role,
+                ExpiresAt = DateTimeOffset.Now.AddMinutes(m_AuthSetting.AccessTokenExpirationMinutes)
             };
 
             // 记录安全日志
-            await LogSuccessfulLogin(user.Username);
+            await LogSuccessfulLogin(user.UserName);
 
             return new ApiResponse<SignedInUser>
             {
@@ -233,7 +322,11 @@ public class AuthManager
         }
     }
 
-    public async Task<ApiResponse<bool>> Logout()
+    /// <summary>
+    /// 用户登出
+    /// </summary>
+    /// <returns>登出结果</returns>
+    public async Task<ApiResponse> Logout()
     {
         try
         {
@@ -242,7 +335,7 @@ public class AuthManager
             
             if (string.IsNullOrEmpty(authorizationHeader) || !authorizationHeader.StartsWith("Bearer "))
             {
-                return new ApiResponse<bool>
+                return new ApiResponse
                 {
                     Success = false,
                     Error = "未找到有效的访问令牌"
@@ -283,7 +376,7 @@ public class AuthManager
             // 获取当前用户信息
             var userId = m_HttpContextAccessor.GetCurrentUserId();
             var user = await m_UserRepository.GetByIdAsync(userId, false);
-            var userName = user?.Username ?? "unknown";
+            var userName = user?.UserName ?? "unknown";
 
             // 将令牌添加到数据库黑名单
             var tokenBlacklist = new TokenBlacklist
@@ -314,10 +407,9 @@ public class AuthManager
             });
             await m_SecurityAuditLogRepository.CommitAsync();
 
-            return new ApiResponse<bool>
+            return new ApiResponse
             {
                 Success = true,
-                Data = true
             };
         }
         catch (Exception ex)
@@ -335,7 +427,7 @@ public class AuthManager
             });
             await m_SecurityAuditLogRepository.CommitAsync();
 
-            return new ApiResponse<bool>
+            return new ApiResponse
             {
                 Success = false,
                 Error = "登出失败"
@@ -444,16 +536,13 @@ public class AuthManager
 
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Name, user.UserName),
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        // 添加角色声明（如果存在）
-        if (!string.IsNullOrEmpty(user.Role))
-        {
-            claims.Add(new Claim(ClaimTypes.Role, user.Role));
-        }
+        // 添加角色声明
+        claims.Add(new Claim(ClaimTypes.Role, user.Role.ToString()));
 
         var token = new JwtSecurityToken(
             issuer: jwtTokenIssuer,
@@ -518,6 +607,29 @@ public class AuthManager
         return (true, string.Empty);
     }
 
+    private (bool isValid, string message) ValidateRegisterRequest(RegisterRequest request)
+    {
+        if (request == null)
+            return (false, "请求不能为空");
+
+        if (string.IsNullOrWhiteSpace(request.UserName))
+            return (false, "用户名不能为空");
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return (false, "密码不能为空");
+
+        if (request.UserName.Length > 50)
+            return (false, "用户名长度不能超过50个字符");
+
+        if (request.Password.Length > 128)
+            return (false, "密码长度不能超过128个字符");
+
+        if (request.Password != request.ConfirmPassword)
+            return (false, "密码和确认密码不匹配");
+
+        return (true, string.Empty);
+    }
+
     /// <summary>
     /// 检查账户状态
     /// </summary>
@@ -577,7 +689,7 @@ public class AuthManager
         await m_UserRepository.CommitAsync();
 
         // 记录安全日志
-        await LogFailedLoginAttempt(user.Username, $"密码验证失败，失败次数: {user.FailedLoginAttempts}");
+        await LogFailedLoginAttempt(user.UserName, $"密码验证失败，失败次数: {user.FailedLoginAttempts}");
     }
 
     /// <summary>
@@ -595,7 +707,7 @@ public class AuthManager
         await m_UserRepository.CommitAsync();
 
         // 记录安全日志
-        await LogSuccessfulLogin(user.Username);
+        await LogSuccessfulLogin(user.UserName);
     }
 
     /// <summary>

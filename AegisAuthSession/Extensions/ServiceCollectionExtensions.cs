@@ -1,4 +1,4 @@
-using AegisAuth.Core.Services;
+using AegisAuthBase.Services;
 using AegisAuthSession.Managers;
 using AegisAuthSession.Middleware;
 using AegisAuthSession.Services;

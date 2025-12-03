@@ -1,6 +1,4 @@
-using System.ComponentModel.DataAnnotations;
-
-namespace AegisAuth.Core.Entities;
+namespace AegisAuthBase.Entities;
 
 /// <summary>
 /// 用户实体类
@@ -10,20 +8,17 @@ public class User
     /// <summary>
     /// 用户ID
     /// </summary>
-    [StringLength(50)]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// 用户名
     /// </summary>
-    [StringLength(50)]
-    public required string Username { get; set; }
+    public required string UserName { get; set; }
 
     /// <summary>
-    /// 用户角色（由使用者自定义，如 "Admin", "User" 等）
+    /// 用户角色
     /// </summary>
-    [StringLength(50)]
-    public string? Role { get; set; }
+    public UserRole Role { get; set; }
 
     /// <summary>
     /// 是否激活
@@ -43,13 +38,11 @@ public class User
     /// <summary>
     /// 密码哈希
     /// </summary>
-    [StringLength(256)]
     public required string PasswordHash { get; set; }
 
     /// <summary>
     /// 密码盐值
     /// </summary>
-    [StringLength(256)]
     public required string PasswordSalt { get; set; }
 
     /// <summary>

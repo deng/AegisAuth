@@ -1,4 +1,4 @@
-namespace AegisAuth.Core.Responses;
+namespace AegisAuthBase.Responses;
 
 /// <summary>
 /// API响应模型

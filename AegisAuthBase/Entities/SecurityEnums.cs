@@ -1,9 +1,9 @@
-namespace AegisAuth.Core.Entities;
+namespace AegisAuthBase.Entities;
 
 /// <summary>
 /// 安全事件类型枚举
 /// </summary>
-public enum SecurityEventType
+public enum SecurityEventType : byte
 {
     /// <summary>
     /// 用户登录
@@ -54,7 +54,7 @@ public enum SecurityEventType
 /// <summary>
 /// 安全事件结果枚举
 /// </summary>
-public enum SecurityEventResult
+public enum SecurityEventResult : byte
 {
     /// <summary>
     /// 成功
@@ -75,4 +75,20 @@ public enum SecurityEventResult
     /// 信息
     /// </summary>
     Information = 4
+}
+
+/// <summary>
+/// 用户角色枚举
+/// </summary>
+public enum UserRole : byte
+{
+    /// <summary>
+    /// 普通用户
+    /// </summary>
+    User = 1,
+
+    /// <summary>
+    /// 管理员
+    /// </summary>
+    Admin = 2
 }

@@ -1,4 +1,4 @@
-namespace AegisAuth.Core.Entities;
+namespace AegisAuthBase.Entities;
 
 /// <summary>
 /// 安全审计日志实体类

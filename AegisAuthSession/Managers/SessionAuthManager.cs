@@ -1,10 +1,10 @@
 using AegisAuthSession.Entities;
 using AegisAuthSession.Repositories;
-using AegisAuth.Core.Requests;
-using AegisAuth.Core.Responses;
-using AegisAuth.Core.Services;
-using AegisAuth.Core.Entities;
-using AegisAuth.Core.Repositories;
+using AegisAuthBase.Requests;
+using AegisAuthBase.Responses;
+using AegisAuthBase.Services;
+using AegisAuthBase.Entities;
+using AegisAuthBase.Repositories;
 using AegisAuthSession.Settings;
 using AegisAuthSession.Services;
 using Microsoft.Extensions.Logging;
@@ -101,8 +101,8 @@ public class SessionAuthManager
         // 6. 创建 Session
         var session = await CreateUserSessionAsync(
             userId: user.Id,
-            userName: user.Username,
-            role: user.Role,
+            userName: user.UserName,
+            role: user.Role.ToString(),
             ipAddress: _httpContextAccessor.GetClientIpAddress(),
             userAgent: _httpContextAccessor.GetUserAgent(),
             rememberMe: request.RememberMe
@@ -221,7 +221,7 @@ public class SessionAuthManager
             Id = sessionId,
             UserId = userId,
             UserName = userName,
-            Role = role,
+            Role = Enum.Parse<UserRole>(role ?? "User"),
             CreatedAt = now,
             LastAccessedAt = now,
             ExpiresAt = now.AddMinutes(timeoutMinutes),
@@ -434,7 +434,7 @@ public class SessionAuthManager
         await _userRepository.CommitAsync();
 
         // 记录安全日志
-        await LogFailedLoginAttempt(user.Username, $"密码验证失败，失败次数: {user.FailedLoginAttempts}");
+        await LogFailedLoginAttempt(user.UserName, $"密码验证失败，失败次数: {user.FailedLoginAttempts}");
     }
 
     /// <summary>
@@ -452,7 +452,7 @@ public class SessionAuthManager
         await _userRepository.CommitAsync();
 
         // 记录安全日志
-        await LogSuccessfulLogin(user.Username);
+        await LogSuccessfulLogin(user.UserName);
     }
 
     /// <summary>

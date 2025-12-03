@@ -1,4 +1,4 @@
-using AegisAuth.Core.Repositories;
+using AegisAuthBase.Repositories;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -32,6 +32,12 @@ public class TokenCleanupWorker : BackgroundService
     private readonly TokenCleanupWorkerOptions m_Options;
     private readonly PeriodicTimer m_Timer;
 
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="logger">日志记录器</param>
+    /// <param name="serviceProvider">服务提供者</param>
+    /// <param name="options">Worker配置选项</param>
     public TokenCleanupWorker(
         ILogger<TokenCleanupWorker> logger,
         IServiceProvider serviceProvider,
@@ -43,6 +49,11 @@ public class TokenCleanupWorker : BackgroundService
         m_Timer = new PeriodicTimer(TimeSpan.FromHours(m_Options.CleanupIntervalHours));
     }
 
+    /// <summary>
+    /// 执行后台任务
+    /// </summary>
+    /// <param name="stoppingToken">取消令牌</param>
+    /// <returns>任务</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         m_Logger.LogInformation("过期令牌清理Worker启动，清理间隔: {interval}小时", m_Options.CleanupIntervalHours);
@@ -97,6 +108,9 @@ public class TokenCleanupWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// 释放资源
+    /// </summary>
     public override void Dispose()
     {
         m_Timer?.Dispose();

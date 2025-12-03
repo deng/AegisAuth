@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
 
-namespace AegisAuth.Core.Services;
+namespace AegisAuthBase.Services;
 
 /// <summary>
 /// HTTP上下文访问器接口

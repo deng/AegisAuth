@@ -1,6 +1,6 @@
-using AegisAuth.Core.Entities;
+using AegisAuthBase.Entities;
 
-namespace AegisAuth.Core.Repositories;
+namespace AegisAuthBase.Repositories;
 
 /// <summary>
 /// 安全审计日志仓储接口

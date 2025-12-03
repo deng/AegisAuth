@@ -1,6 +1,6 @@
-using AegisAuth.Core.Entities;
+using AegisAuthBase.Entities;
 
-namespace AegisAuth.Core.Repositories;
+namespace AegisAuthBase.Repositories;
 
 /// <summary>
 /// JWT令牌黑名单仓储接口

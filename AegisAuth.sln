@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AegisAuthSession", "AegisAu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AegisAuthSessionTest", "AegisAuthSessionTest\AegisAuthSessionTest.csproj", "{B515A082-1987-40B1-B9C6-8355C02C11BD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AegisAuth.Core", "AegisAuth.Core\AegisAuth.Core.csproj", "{16EB1E9D-0F6D-40F7-81E5-02AB824EA0E3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AegisAuthBase", "AegisAuthBase\AegisAuthBase.csproj", "{16EB1E9D-0F6D-40F7-81E5-02AB824EA0E3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -1,6 +1,6 @@
-using AegisAuth.Core.Entities;
+using AegisAuthBase.Entities;
 
-namespace AegisAuth.Core.Repositories;
+namespace AegisAuthBase.Repositories;
 
 /// <summary>
 /// 用户仓储接口
@@ -13,6 +13,12 @@ public interface IUserRepository
     /// <param name="userName">用户名</param>
     /// <returns>用户实体</returns>
     Task<User?> GetUserByUserNameAsync(string userName);
+
+    /// <summary>
+    /// 创建用户
+    /// </summary>
+    /// <param name="user">用户实体</param>
+    Task CreateAsync(User user);
 
     /// <summary>
     /// 根据ID查找用户

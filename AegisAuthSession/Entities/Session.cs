@@ -1,3 +1,4 @@
+using AegisAuthBase.Entities;
 using System.ComponentModel.DataAnnotations;
 
 namespace AegisAuthSession.Entities;
@@ -28,8 +29,7 @@ public class Session
     /// <summary>
     /// 用户角色
     /// </summary>
-    [StringLength(50)]
-    public string? Role { get; set; }
+    public UserRole Role { get; set; }
 
     /// <summary>
     /// 创建时间

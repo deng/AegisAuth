@@ -38,10 +38,8 @@ public class SessionValidationMiddleware
                     new Claim("SessionId", session.Id)
                 };
 
-                if (!string.IsNullOrEmpty(session.Role))
-                {
-                    claims.Add(new Claim(ClaimTypes.Role, session.Role));
-                }
+                // 添加角色声明
+                claims.Add(new Claim(ClaimTypes.Role, session.Role.ToString()));
 
                 var identity = new ClaimsIdentity(claims, "Session");
                 context.User = new ClaimsPrincipal(identity);

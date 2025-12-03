@@ -1,3 +1,5 @@
+using AegisAuthBase.Entities;
+
 namespace AegisAuthSession.Entities;
 
 /// <summary>
@@ -23,7 +25,7 @@ public class SessionInfo
     /// <summary>
     /// 用户角色
     /// </summary>
-    public string? Role { get; set; }
+    public UserRole Role { get; set; }
 
     /// <summary>
     /// 创建时间

@@ -1,6 +1,4 @@
-using System.ComponentModel.DataAnnotations;
-
-namespace AegisAuth.Core.Entities;
+namespace AegisAuthBase.Entities;
 
 /// <summary>
 /// JWT令牌黑名单实体类
@@ -11,13 +9,11 @@ public class TokenBlacklist
     /// <summary>
     /// 记录ID
     /// </summary>
-    [StringLength(50)]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// JWT令牌（哈希值，为安全起见不存储原始令牌）
     /// </summary>
-    [StringLength(128)] // SHA256哈希长度
     public required string TokenHash { get; set; }
 
     /// <summary>
@@ -38,31 +34,26 @@ public class TokenBlacklist
     /// <summary>
     /// 关联的用户ID
     /// </summary>
-    [StringLength(50)]
     public string? UserId { get; set; }
 
     /// <summary>
     /// 用户名（冗余字段，便于查询）
     /// </summary>
-    [StringLength(50)]
     public string? UserName { get; set; }
 
     /// <summary>
     /// 吊销原因
     /// </summary>
-    [StringLength(200)]
     public string? RevocationReason { get; set; }
 
     /// <summary>
     /// IP地址
     /// </summary>
-    [StringLength(45)] // IPv6最大长度
     public string? IpAddress { get; set; }
 
     /// <summary>
     /// 用户代理
     /// </summary>
-    [StringLength(500)]
     public string? UserAgent { get; set; }
 
     /// <summary>

@@ -1,5 +1,5 @@
-using AegisAuth.Core.Entities;
-using AegisAuth.Core.Repositories;
+using AegisAuthBase.Entities;
+using AegisAuthBase.Repositories;
 
 namespace AegisAuthSessionTest.Repositories;
 

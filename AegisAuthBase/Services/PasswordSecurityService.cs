@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace AegisAuth.Core.Services;
+namespace AegisAuthBase.Services;
 
 /// <summary>
 /// 密码安全服务 - 生产环境级别的密码处理

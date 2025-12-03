@@ -1,4 +1,4 @@
-using AegisAuth.Core.Repositories;
+using AegisAuthBase.Repositories;
 using AegisAuthSession.Extensions;
 using AegisAuthSessionTest.Repositories;
 

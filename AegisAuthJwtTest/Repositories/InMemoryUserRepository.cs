@@ -1,5 +1,5 @@
-using AegisAuth.Core.Entities;
-using AegisAuth.Core.Repositories;
+using AegisAuthBase.Entities;
+using AegisAuthBase.Repositories;
 
 namespace AegisAuthJwtTest.Repositories;
 
@@ -13,10 +13,10 @@ public class InMemoryUserRepository : IUserRepository
         var testUser = new User
         {
             Id = "1",
-            Username = "testuser",
+            UserName = "testuser",
             PasswordHash = "hashedpassword", // In real implementation, this would be properly hashed
             PasswordSalt = "salt",
-            Role = "Admin",
+            Role = UserRole.Admin,
             IsActive = true,
             FailedLoginAttempts = 0
         };
@@ -25,8 +25,14 @@ public class InMemoryUserRepository : IUserRepository
 
     public Task<User?> GetUserByUserNameAsync(string userName)
     {
-        var user = _users.FirstOrDefault(u => u.Username == userName);
+        var user = _users.FirstOrDefault(u => u.UserName == userName);
         return Task.FromResult(user);
+    }
+
+    public Task CreateAsync(User user)
+    {
+        _users.Add(user);
+        return Task.CompletedTask;
     }
 
     public Task<User?> GetByIdAsync(string id, bool getForUpdate)

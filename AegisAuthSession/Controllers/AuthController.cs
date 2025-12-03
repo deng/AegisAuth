@@ -1,6 +1,6 @@
 using AegisAuthSession.Managers;
-using AegisAuth.Core.Requests;
-using AegisAuth.Core.Responses;
+using AegisAuthBase.Requests;
+using AegisAuthBase.Responses;
 using AegisAuthSession.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
