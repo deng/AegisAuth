@@ -48,7 +48,44 @@ public enum SecurityEventType : byte
     /// <summary>
     /// 异常访问
     /// </summary>
-    SuspiciousActivity = 9
+    AbnormalAccess = 9,
+
+    /// <summary>
+    /// 双因素认证验证
+    /// </summary>
+    TwoFactorVerify = 10
+}
+
+/// <summary>
+/// 双因素认证类型 (Flags)
+/// </summary>
+[Flags]
+public enum TwoFactorTypeFlags : byte
+{
+    /// <summary>
+    /// 未启用
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// 电子邮件
+    /// </summary>
+    Email = 1,
+
+    /// <summary>
+    /// 短信
+    /// </summary>
+    Sms = 2,
+
+    /// <summary>
+    /// 认证器应用 (Google Authenticator等)
+    /// </summary>
+    AuthenticatorApp = 4,
+
+    /// <summary>
+    /// 通行密钥
+    /// </summary>
+    Passkey = 8
 }
 
 /// <summary>
@@ -75,6 +112,22 @@ public enum SecurityEventResult : byte
     /// 信息
     /// </summary>
     Information = 4
+}
+
+/// <summary>
+/// 用户通行密钥凭证类型
+/// </summary>
+public enum UserPasskeyCredentialType : byte
+{
+    /// <summary>
+    /// 未知
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
+    /// 公钥 (public-key)
+    /// </summary>
+    PublicKey = 1
 }
 
 /// <summary>

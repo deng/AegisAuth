@@ -1,0 +1,6 @@
+@AegisAuth.WebAuthnDemo_HostAddress = http://localhost:5202
+
+GET {{AegisAuth.WebAuthnDemo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

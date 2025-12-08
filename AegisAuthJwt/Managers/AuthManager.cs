@@ -4,6 +4,8 @@ using AegisAuthBase.Requests;
 using AegisAuthBase.Responses;
 using AegisAuthBase.Services;
 using AegisAuthBase.Settings;
+using Fido2NetLib;
+using Fido2NetLib.Objects;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -22,6 +24,9 @@ public class AuthManager
     private readonly ITokenBlacklistRepository m_TokenBlacklistRepository;
     private readonly PasswordSecurityService m_PasswordSecurityService;
     private readonly IHttpContextAccessorService m_HttpContextAccessor;
+    private readonly ITwoFactorSender? m_TwoFactorSender;
+    private readonly ITwoFactorStore? m_TwoFactorStore;
+    private readonly IPasskeyService? m_PasskeyService;
 
     // Token黑名单 - 存储已失效的访问令牌
     private static readonly HashSet<string> s_TokenBlacklist = new HashSet<string>();
@@ -37,7 +42,18 @@ public class AuthManager
     /// <param name="securityAuditLogRepository">安全审计日志仓储</param>
     /// <param name="tokenBlacklistRepository">令牌黑名单仓储</param>
     /// <param name="httpContextAccessor">HTTP 上下文访问器服务</param>
-    public AuthManager(AuthSetting authSetting, IUserRepository userRepository, ISecurityAuditLogRepository securityAuditLogRepository, ITokenBlacklistRepository tokenBlacklistRepository, IHttpContextAccessorService httpContextAccessor)
+    /// <param name="twoFactorSender">双因素认证发送器 (可选)</param>
+    /// <param name="twoFactorStore">双因素认证存储 (可选)</param>
+    /// <param name="passkeyService">通行密钥服务 (可选)</param>
+    public AuthManager(
+        AuthSetting authSetting, 
+        IUserRepository userRepository, 
+        ISecurityAuditLogRepository securityAuditLogRepository, 
+        ITokenBlacklistRepository tokenBlacklistRepository, 
+        IHttpContextAccessorService httpContextAccessor,
+        ITwoFactorSender? twoFactorSender = null,
+        ITwoFactorStore? twoFactorStore = null,
+        IPasskeyService? passkeyService = null)
     {
         m_AuthSetting = authSetting;
         m_UserRepository = userRepository;
@@ -45,6 +61,9 @@ public class AuthManager
         m_TokenBlacklistRepository = tokenBlacklistRepository ?? throw new ArgumentNullException(nameof(tokenBlacklistRepository));
         m_HttpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
         m_PasswordSecurityService = new PasswordSecurityService();
+        m_TwoFactorSender = twoFactorSender;
+        m_TwoFactorStore = twoFactorStore;
+        m_PasskeyService = passkeyService;
     }
 
     /// <summary>
@@ -105,6 +124,107 @@ public class AuthManager
         // 5. 登录成功，重置失败计数并更新最后登录时间
         await HandleSuccessfulLogin(user);
 
+            // 5.1 检查是否需要双因素认证
+        if (user.TwoFactorEnabled)
+        {
+            if (m_TwoFactorStore == null)
+            {
+                return new ApiResponse<SignedInUser>
+                {
+                    Success = false,
+                    Error = "双因素认证存储未配置"
+                };
+            }
+
+            var twoFactorId = Guid.NewGuid().ToString();
+            var codesToSave = new Dictionary<string, string>();
+
+            // 1. 处理 AuthenticatorApp (TOTP)
+            if (user.TwoFactorType.HasFlag(TwoFactorTypeFlags.AuthenticatorApp))
+            {
+                // 标记需要 TOTP 验证
+                codesToSave["TOTP"] = "REQUIRED";
+            }
+
+            // 2. 处理 Email
+            if (user.TwoFactorType.HasFlag(TwoFactorTypeFlags.Email))
+            {
+                if (m_TwoFactorSender == null)
+                {
+                    return new ApiResponse<SignedInUser>
+                    {
+                        Success = false,
+                        Error = "双因素认证发送器未配置"
+                    };
+                }
+                
+                var code = new Random().Next(100000, 999999).ToString();
+                codesToSave["Email"] = code;
+                await m_TwoFactorSender.SendCodeAsync(user, code, TwoFactorTypeFlags.Email);
+            }
+
+            // 3. 处理 SMS
+            if (user.TwoFactorType.HasFlag(TwoFactorTypeFlags.Sms))
+            {
+                if (m_TwoFactorSender == null)
+                {
+                    return new ApiResponse<SignedInUser>
+                    {
+                        Success = false,
+                        Error = "双因素认证发送器未配置"
+                    };
+                }
+
+                var code = new Random().Next(100000, 999999).ToString();
+                codesToSave["Sms"] = code;
+                await m_TwoFactorSender.SendCodeAsync(user, code, TwoFactorTypeFlags.Sms);
+            }
+
+            // 4. 处理 Passkey
+            AssertionOptions? passkeyOptions = null;
+            if (user.TwoFactorType.HasFlag(TwoFactorTypeFlags.Passkey))
+            {
+                if (m_PasskeyService == null)
+                {
+                    return new ApiResponse<SignedInUser>
+                    {
+                        Success = false,
+                        Error = "通行密钥服务未配置"
+                    };
+                }
+                
+                var options = await m_PasskeyService.GetLoginOptionsAsync(user);
+                passkeyOptions = options;
+                
+                // 序列化存储 Options (Challenge)
+                var optionsJson = System.Text.Json.JsonSerializer.Serialize(options);
+                codesToSave["Passkey"] = optionsJson;
+            }
+
+            // 将所有需要的验证码合并存储 (格式: Type:Code|Type:Code)
+            // 简化起见，我们这里序列化存储，或者修改 Store 接口支持多值
+            // 为了兼容现有接口，我们将 Dictionary 序列化为 JSON 字符串存储
+            var serializedCodes = System.Text.Json.JsonSerializer.Serialize(codesToSave);
+            await m_TwoFactorStore.SaveCodeAsync(twoFactorId, serializedCodes, user.Id, TimeSpan.FromMinutes(5));
+
+            return new ApiResponse<SignedInUser>
+            {
+                Success = true,
+                Data = new SignedInUser
+                {
+                    UserId = user.Id,
+                    UserName = user.UserName,
+                    Token = string.Empty,
+                    RefreshToken = string.Empty,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5),
+                    RequiresTwoFactor = true,
+                    TwoFactorId = twoFactorId,
+                    TwoFactorType = user.TwoFactorType,
+                    PasskeyOptions = passkeyOptions,
+                    Role = user.Role
+                }
+            };
+        }        
         // 6. 生成 JWT token 和刷新令牌
         var token = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken(user);
@@ -123,6 +243,162 @@ public class AuthManager
         {
             Success = true,
             Data = signedInUser
+        };
+    }
+
+    /// <summary>
+    /// 验证双因素认证
+    /// </summary>
+    /// <param name="request">验证请求</param>
+    /// <returns>登录结果</returns>
+    public async Task<ApiResponse<SignedInUser>> VerifyTwoFactor(TwoFactorVerifyRequest request)
+    {
+        if (m_TwoFactorStore == null)
+        {
+            return new ApiResponse<SignedInUser>
+            {
+                Success = false,
+                Error = "双因素认证服务未配置"
+            };
+        }
+
+        // 1. 获取验证码上下文
+        var (storedCode, userId) = await m_TwoFactorStore.GetCodeAsync(request.TwoFactorId);
+        if (string.IsNullOrEmpty(storedCode) || string.IsNullOrEmpty(userId))
+        {
+            return new ApiResponse<SignedInUser>
+            {
+                Success = false,
+                Error = "验证会话已过期或无效"
+            };
+        }
+
+        // 2. 获取用户
+        var user = await m_UserRepository.GetByIdAsync(userId, false);
+        if (user == null)
+        {
+             return new ApiResponse<SignedInUser>
+            {
+                Success = false,
+                Error = "用户不存在"
+            };
+        }
+
+        // 3. 验证代码
+        bool isAllValid = true;
+        Dictionary<string, string>? storedCodes = null;
+
+        try
+        {
+            storedCodes = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(storedCode);
+        }
+        catch
+        {
+            isAllValid = false;
+        }
+
+        if (storedCodes != null)
+        {
+            // 验证 TOTP
+            if (storedCodes.ContainsKey("TOTP"))
+            {
+                var code = request.Codes.GetValueOrDefault("TOTP");
+                if (string.IsNullOrEmpty(code) || !VerifyTotp(user.TwoFactorSecret, code))
+                {
+                    isAllValid = false;
+                }
+            }
+
+            // 验证 Email
+            if (storedCodes.ContainsKey("Email"))
+            {
+                var code = request.Codes.GetValueOrDefault("Email");
+                if (string.IsNullOrEmpty(code) || code != storedCodes["Email"]) isAllValid = false;
+            }
+
+            // 验证 SMS
+            if (storedCodes.ContainsKey("Sms"))
+            {
+                var code = request.Codes.GetValueOrDefault("Sms");
+                if (string.IsNullOrEmpty(code) || code != storedCodes["Sms"]) isAllValid = false;
+            }
+
+            // 验证 Passkey
+            if (storedCodes.ContainsKey("Passkey"))
+            {
+                if (m_PasskeyService == null)
+                {
+                    return new ApiResponse<SignedInUser>
+                    {
+                        Success = false,
+                        Error = "通行密钥服务未配置"
+                    };
+                }
+
+                if (request.PasskeyAssertion == null)
+                {
+                    isAllValid = false;
+                }
+                else
+                {
+                    try 
+                    {
+                        var originalOptionsJson = storedCodes["Passkey"];
+                        var originalOptions = System.Text.Json.JsonSerializer.Deserialize<AssertionOptions>(originalOptionsJson);
+                        
+                        var assertionJson = System.Text.Json.JsonSerializer.Serialize(request.PasskeyAssertion);
+                        var assertion = System.Text.Json.JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(assertionJson);
+
+                        if (originalOptions != null && assertion != null)
+                        {
+                            var isValid = await m_PasskeyService.LoginAsync(user, assertion, originalOptions);
+                            if (!isValid) isAllValid = false;
+                        }
+                        else
+                        {
+                            isAllValid = false;
+                        }
+                    }
+                    catch
+                    {
+                        isAllValid = false;
+                    }
+                }
+            }
+        }
+        else
+        {
+            isAllValid = false;
+        }
+
+        if (!isAllValid)
+        {
+            return new ApiResponse<SignedInUser>
+            {
+                Success = false,
+                Error = "验证码错误"
+            };
+        }
+
+        // 4. 移除验证码/会话
+        await m_TwoFactorStore.RemoveCodeAsync(request.TwoFactorId);
+
+        // 5. 生成 Token
+        var token = GenerateJwtToken(user);
+        var refreshToken = GenerateRefreshToken(user);
+
+        return new ApiResponse<SignedInUser>
+        {
+            Success = true,
+            Data = new SignedInUser
+            {
+                UserId = user.Id,
+                UserName = user.UserName,
+                Token = token,
+                RefreshToken = refreshToken,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(m_AuthSetting.AccessTokenExpirationMinutes),
+                Role = user.Role
+            }
         };
     }
 
@@ -711,6 +987,24 @@ public class AuthManager
     }
 
     /// <summary>
+    /// 验证 TOTP 代码
+    /// </summary>
+    private bool VerifyTotp(string? secret, string code)
+    {
+        if (string.IsNullOrEmpty(secret)) return false;
+        try
+        {
+            var secretBytes = OtpNet.Base32Encoding.ToBytes(secret);
+            var totp = new OtpNet.Totp(secretBytes);
+            return totp.VerifyTotp(code, out _, new OtpNet.VerificationWindow(previous: 1, future: 1));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 记录失败登录尝试
     /// </summary>
     private async Task LogFailedLoginAttempt(string userName, string reason)
@@ -750,4 +1044,208 @@ public class AuthManager
     }
 
     #endregion
+
+    /// <summary>
+    /// 获取通行密钥登录选项
+    /// </summary>
+    public async Task<ApiResponse<PasskeyLoginOptionsResponse>> GetPasskeyLoginOptionsAsync(string userName)
+    {
+        if (m_PasskeyService == null)
+             return new ApiResponse<PasskeyLoginOptionsResponse> { Success = false, Error = "通行密钥服务未配置" };
+        
+        if (m_TwoFactorStore == null)
+             return new ApiResponse<PasskeyLoginOptionsResponse> { Success = false, Error = "双因素认证存储未配置" };
+
+        var user = await m_UserRepository.GetUserByUserNameAsync(userName);
+        if (user == null) return new ApiResponse<PasskeyLoginOptionsResponse> { Success = false, Error = "用户不存在" };
+
+        try 
+        {
+            var options = await m_PasskeyService.GetLoginOptionsAsync(user);
+            var flowId = Guid.NewGuid().ToString();
+            var optionsJson = System.Text.Json.JsonSerializer.Serialize(options);
+            
+            // Store options for 5 minutes
+            await m_TwoFactorStore.SaveCodeAsync(flowId, optionsJson, user.Id, TimeSpan.FromMinutes(5));
+            
+            return new ApiResponse<PasskeyLoginOptionsResponse> 
+            { 
+                Success = true, 
+                Data = new PasskeyLoginOptionsResponse 
+                { 
+                    FlowId = flowId, 
+                    Options = options 
+                } 
+            };
+        }
+        catch (Exception ex)
+        {
+             return new ApiResponse<PasskeyLoginOptionsResponse> { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// 通行密钥登录
+    /// </summary>
+    public async Task<ApiResponse<SignedInUser>> LoginPasskeyAsync(PasskeyLoginRequest request)
+    {
+        if (m_PasskeyService == null)
+             return new ApiResponse<SignedInUser> { Success = false, Error = "通行密钥服务未配置" };
+        
+        if (m_TwoFactorStore == null)
+             return new ApiResponse<SignedInUser> { Success = false, Error = "双因素认证存储未配置" };
+
+        // 1. Get original options
+        var (storedOptionsJson, userId) = await m_TwoFactorStore.GetCodeAsync(request.FlowId);
+        if (string.IsNullOrEmpty(storedOptionsJson) || string.IsNullOrEmpty(userId))
+        {
+            return new ApiResponse<SignedInUser> { Success = false, Error = "登录会话已过期或无效" };
+        }
+
+        var user = await m_UserRepository.GetByIdAsync(userId, false);
+        if (user == null) return new ApiResponse<SignedInUser> { Success = false, Error = "用户不存在" };
+
+        try
+        {
+            var originalOptions = System.Text.Json.JsonSerializer.Deserialize<AssertionOptions>(storedOptionsJson);
+            var assertionJson = System.Text.Json.JsonSerializer.Serialize(request.Assertion);
+            var assertion = System.Text.Json.JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(assertionJson);
+
+            if (originalOptions != null && assertion != null)
+            {
+                var isValid = await m_PasskeyService.LoginAsync(user, assertion, originalOptions);
+                if (isValid)
+                {
+                    // Login successful
+                    await HandleSuccessfulLogin(user);
+                    await m_TwoFactorStore.RemoveCodeAsync(request.FlowId);
+
+                    // Generate Token
+                    var token = GenerateJwtToken(user);
+                    var refreshToken = GenerateRefreshToken(user);
+
+                    return new ApiResponse<SignedInUser>
+                    {
+                        Success = true,
+                        Data = new SignedInUser
+                        {
+                            UserId = user.Id,
+                            UserName = user.UserName,
+                            Token = token,
+                            RefreshToken = refreshToken,
+                            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(m_AuthSetting.AccessTokenExpirationMinutes),
+                            Role = user.Role
+                        }
+                    };
+                }
+                else
+                {
+                    await HandleFailedLoginAttempt(user);
+                    return new ApiResponse<SignedInUser> { Success = false, Error = "验证失败" };
+                }
+            }
+            else
+            {
+                return new ApiResponse<SignedInUser> { Success = false, Error = "无效的数据格式" };
+            }
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse<SignedInUser> { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// 获取通行密钥注册选项
+    /// </summary>
+    public async Task<ApiResponse<PasskeyRegisterOptionsResponse>> GetPasskeyRegisterOptionsAsync(string userId)
+    {
+        if (m_PasskeyService == null)
+             return new ApiResponse<PasskeyRegisterOptionsResponse> { Success = false, Error = "通行密钥服务未配置" };
+        
+        if (m_TwoFactorStore == null)
+             return new ApiResponse<PasskeyRegisterOptionsResponse> { Success = false, Error = "双因素认证存储未配置" };
+
+        var user = await m_UserRepository.GetByIdAsync(userId, false);
+        if (user == null) return new ApiResponse<PasskeyRegisterOptionsResponse> { Success = false, Error = "用户不存在" };
+
+        try 
+        {
+            var options = await m_PasskeyService.GetRegisterOptionsAsync(user);
+            var flowId = Guid.NewGuid().ToString();
+            var optionsJson = System.Text.Json.JsonSerializer.Serialize(options);
+            
+            // Store options for 5 minutes
+            await m_TwoFactorStore.SaveCodeAsync(flowId, optionsJson, userId, TimeSpan.FromMinutes(5));
+            
+            return new ApiResponse<PasskeyRegisterOptionsResponse> 
+            { 
+                Success = true, 
+                Data = new PasskeyRegisterOptionsResponse 
+                { 
+                    FlowId = flowId, 
+                    Options = options 
+                } 
+            };
+        }
+        catch (Exception ex)
+        {
+             return new ApiResponse<PasskeyRegisterOptionsResponse> { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// 注册通行密钥
+    /// </summary>
+    public async Task<ApiResponse> RegisterPasskeyAsync(string userId, PasskeyRegisterRequest request)
+    {
+        if (m_PasskeyService == null)
+             return new ApiResponse { Success = false, Error = "通行密钥服务未配置" };
+        
+        if (m_TwoFactorStore == null)
+             return new ApiResponse { Success = false, Error = "双因素认证存储未配置" };
+
+        var user = await m_UserRepository.GetByIdAsync(userId, false);
+        if (user == null) return new ApiResponse { Success = false, Error = "用户不存在" };
+
+        // 1. Get original options
+        var (storedOptionsJson, storedUserId) = await m_TwoFactorStore.GetCodeAsync(request.FlowId);
+        if (string.IsNullOrEmpty(storedOptionsJson) || storedUserId != userId)
+        {
+            return new ApiResponse { Success = false, Error = "注册会话已过期或无效" };
+        }
+
+        try
+        {
+            var originalOptions = System.Text.Json.JsonSerializer.Deserialize<CredentialCreateOptions>(storedOptionsJson);
+            var attestationJson = System.Text.Json.JsonSerializer.Serialize(request.Attestation);
+            var attestation = System.Text.Json.JsonSerializer.Deserialize<AuthenticatorAttestationRawResponse>(attestationJson);
+
+            if (originalOptions != null && attestation != null)
+            {
+                await m_PasskeyService.RegisterAsync(user, attestation, originalOptions);
+                
+                // Enable Passkey flag if not already enabled
+                if (!user.TwoFactorType.HasFlag(TwoFactorTypeFlags.Passkey))
+                {
+                    user.TwoFactorType |= TwoFactorTypeFlags.Passkey;
+                    await m_UserRepository.UpdateAsync(user);
+                    await m_UserRepository.CommitAsync();
+                }
+                
+                // Cleanup
+                await m_TwoFactorStore.RemoveCodeAsync(request.FlowId);
+                
+                return new ApiResponse { Success = true };
+            }
+            else
+            {
+                return new ApiResponse { Success = false, Error = "无效的数据格式" };
+            }
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse { Success = false, Error = ex.Message };
+        }
+    }
 }

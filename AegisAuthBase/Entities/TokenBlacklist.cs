@@ -24,12 +24,12 @@ public class TokenBlacklist
     /// <summary>
     /// 令牌创建时间（加入黑名单的时间）
     /// </summary>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>
     /// 令牌过期时间
     /// </summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     /// <summary>
     /// 关联的用户ID
@@ -59,5 +59,5 @@ public class TokenBlacklist
     /// <summary>
     /// 判断令牌是否已过期
     /// </summary>
-    public bool IsExpired => DateTime.UtcNow > ExpiresAt;
+    public bool IsExpired() => DateTimeOffset.UtcNow > ExpiresAt;
 }

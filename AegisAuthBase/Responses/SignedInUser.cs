@@ -1,4 +1,5 @@
 using AegisAuthBase.Entities;
+using Fido2NetLib;
 
 namespace AegisAuthBase.Responses;
 
@@ -33,9 +34,29 @@ public class SignedInUser
     public UserRole Role { get; set; }
 
     /// <summary>
-    /// 令牌过期时间
+    /// 过期时间
     /// </summary>
-    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    /// <summary>
+    /// 是否需要双因素认证
+    /// </summary>
+    public bool RequiresTwoFactor { get; set; }
+
+    /// <summary>
+    /// 双因素认证临时ID (用于验证)
+    /// </summary>
+    public string? TwoFactorId { get; set; }
+
+    /// <summary>
+    /// 双因素认证类型
+    /// </summary>
+    public TwoFactorTypeFlags TwoFactorType { get; set; }
+
+    /// <summary>
+    /// 通行密钥登录选项 (WebAuthn AssertionOptions)
+    /// </summary>
+    public AssertionOptions? PasskeyOptions { get; set; }
 
     /// <summary>
     /// 是否记住登录状态

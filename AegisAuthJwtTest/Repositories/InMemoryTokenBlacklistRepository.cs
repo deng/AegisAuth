@@ -16,13 +16,13 @@ public class InMemoryTokenBlacklistRepository : ITokenBlacklistRepository
 
     public Task<int> CleanupExpiredTokensAsync()
     {
-        var expiredCount = _blacklist.RemoveAll(t => t.IsExpired);
+        var expiredCount = _blacklist.RemoveAll(t => t.IsExpired());
         return Task.FromResult(expiredCount);
     }
 
     public Task<List<string>> GetValidTokenHashesAsync()
     {
-        var validHashes = _blacklist.Where(t => !t.IsExpired).Select(t => t.TokenHash).ToList();
+        var validHashes = _blacklist.Where(t => !t.IsExpired()).Select(t => t.TokenHash).ToList();
         return Task.FromResult(validHashes);
     }
 
