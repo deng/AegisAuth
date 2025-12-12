@@ -39,6 +39,11 @@ public class SignedInUser
     public DateTimeOffset ExpiresAt { get; set; }
 
     /// <summary>
+    /// 是否已启用双因素认证
+    /// </summary>
+    public bool TwoFactorEnabled { get; set; }
+
+    /// <summary>
     /// 是否需要双因素认证
     /// </summary>
     public bool RequiresTwoFactor { get; set; }

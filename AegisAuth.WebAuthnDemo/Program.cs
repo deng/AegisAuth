@@ -1,8 +1,8 @@
 using AegisAuth.WebAuthnDemo.Repositories;
+using AegisAuth.WebAuthnDemo.Services;
 using AegisAuthBase.Repositories;
 using AegisAuthBase.Services;
-using Fido2NetLib;
-using Fido2NetLib.Objects;
+using AegisAuthBase.Extensions;
 using Microsoft.AspNetCore.Builder;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,17 +27,16 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<IUserRepository, MockUserRepository>();
 builder.Services.AddSingleton<IUserPasskeyRepository, MockUserPasskeyRepository>();
 builder.Services.AddSingleton<ITwoFactorStore, MockTwoFactorStore>();
+builder.Services.AddSingleton<ICredentialStore, InMemoryCredentialStore>();
+builder.Services.AddSingleton<DemoUserService>();
 
-// Configure Fido2
-builder.Services.AddSingleton<IFido2>(new Fido2(new Fido2Configuration
+// Add WebAuthn services
+builder.Services.AddWebAuthnServices(options =>
 {
-    ServerDomain = "localhost",
-    ServerName = "WebAuthn Demo",
-    Origins = new HashSet<string> { "https://localhost:7122", "http://localhost:5202" }
-}));
-
-// Add PasskeyService
-builder.Services.AddScoped<IPasskeyService, PasskeyService>();
+    options.ServerDomain = "localhost";
+    options.ServerName = "WebAuthn Demo";
+    options.Origins = new HashSet<string> { "https://localhost:7122", "http://localhost:5202" };
+});
 
 var app = builder.Build();
 

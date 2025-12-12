@@ -1,3 +1,4 @@
 obj/
 bin/
 nuget.sh
+jwt-demo.db*

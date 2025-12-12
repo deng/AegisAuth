@@ -346,7 +346,7 @@
                 showResult('signResult', 'Authenticating and loading private key...', true);
 
                 // Perform initial WebAuthn authentication to get PRF key
-                const initialResponse = await fetch(`${baseUrl}/api/business/verify-options`, { method: 'POST' });
+                const initialResponse = await fetch(`${baseUrl}/api/xbusiness/verify-options`, { method: 'POST' });
                 if (!initialResponse.ok) throw new Error('Failed to get verify options');
 
                 const options = await initialResponse.json();
@@ -428,7 +428,7 @@
                 const signatureBase64 = arrayBufferToBase64(signature);
 
                 // Verify with server (combines WebAuthn verification and signature verification)
-                const verifyResponse = await fetch(`${baseUrl}/api/business/verify`, {
+                const verifyResponse = await fetch(`${baseUrl}/api/xbusiness/verify`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

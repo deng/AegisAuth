@@ -1,10 +1,11 @@
-using System.Threading.Tasks;
 using AegisAuthBase.Entities;
 using Fido2NetLib;
-using Fido2NetLib.Objects;
 
 namespace AegisAuthBase.Services;
 
+/// <summary>
+/// 通行密钥服务接口
+/// </summary>
 public interface IPasskeyService
 {
     /// <summary>
@@ -20,7 +21,7 @@ public interface IPasskeyService
     /// <summary>
     /// 获取登录通行密钥的选项
     /// </summary>
-    Task<AssertionOptions> GetLoginOptionsAsync(User user);
+    Task<AssertionOptions?> GetLoginOptionsAsync(User user);
 
     /// <summary>
     /// 验证登录断言

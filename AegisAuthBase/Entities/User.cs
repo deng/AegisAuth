@@ -76,28 +76,27 @@ public class User
     public string? TwoFactorSecret { get; set; }
 
     /// <summary>
+    /// 是否绑定邮箱
+    /// </summary>
+    public bool IsEmailBound { get; set; }
+
+    /// <summary>
+    /// 是否绑定手机
+    /// </summary>
+    public bool IsPhoneBound { get; set; }
+
+    /// <summary>
+    /// 是否绑定谷歌验证器
+    /// </summary>
+    public bool IsGoogleAuthenticatorBound { get; set; }
+
+    /// <summary>
+    /// 是否绑定通信密钥 (Passkey)
+    /// </summary>
+    public bool IsPasskeyBound { get; set; }
+
+    /// <summary>
     /// 是否被锁定
     /// </summary>
     public bool IsLocked { get; set; }
-}
-
-/// <summary>
-/// 用户凭据实体类
-/// </summary>
-public class UserCredential
-{
-    /// <summary>
-    /// 用户ID
-    /// </summary>
-    public string UserId { get; set; }
-
-    /// <summary>
-    /// 凭据ID
-    /// </summary>
-    public string CredentialId { get; set; }
-
-    /// <summary>
-    /// 公钥
-    /// </summary>
-    public string PublicKey { get; set; }
 }

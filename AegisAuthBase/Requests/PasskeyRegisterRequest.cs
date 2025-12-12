@@ -18,4 +18,10 @@ public class PasskeyRegisterRequest
     /// </summary>
     [Required]
     public required object Attestation { get; set; }
+
+    /// <summary>
+    /// 公钥 (用于签名验证)
+    /// </summary>
+    [Required]
+    public required string PublicKey { get; set; }
 }

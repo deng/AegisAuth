@@ -35,6 +35,14 @@ var authSetting = new AuthSetting
 };
 builder.Services.AddSingleton(authSetting);
 
+// Configure TwoFactor settings
+var twoFactorSettings = new TwoFactorSettings
+{
+    DefaultTwoFactorEnabled = true,
+    DefaultTwoFactorType = TwoFactorTypeFlags.Passkey,
+};
+builder.Services.AddSingleton(twoFactorSettings);
+
 // Add JWT authentication
 builder.Services.AddAuthentication(options =>
 {

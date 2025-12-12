@@ -18,4 +18,9 @@ public class PasskeyLoginRequest
     /// </summary>
     [Required]
     public required object Assertion { get; set; }
+
+    /// <summary>
+    /// 公钥 (用于签名验证，如果客户端私钥对丢失)
+    /// </summary>
+    public string? PublicKey { get; set; }
 }

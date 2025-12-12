@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using AegisAuthBase.Entities;
 using AegisAuthBase.Repositories;
 using Fido2NetLib;
@@ -11,6 +7,9 @@ using Microsoft.Extensions.Options;
 
 namespace AegisAuthBase.Services;
 
+/// <summary>
+/// 通行密钥服务实现
+/// </summary>
 public class PasskeyService : IPasskeyService
 {
     private readonly IFido2 _fido2;
@@ -37,7 +36,7 @@ public class PasskeyService : IPasskeyService
         {
             DisplayName = user.UserName,
             Name = user.UserName,
-            Id = Encoding.UTF8.GetBytes(user.Id) 
+            Id = Encoding.UTF8.GetBytes(user.Id)
         };
 
         // 1. Get options
@@ -79,23 +78,23 @@ public class PasskeyService : IPasskeyService
         var newPasskey = new UserPasskey
         {
             UserId = user.Id,
-            CredentialId = Convert.ToBase64String(result.Id), 
+            CredentialId = Convert.ToBase64String(result.Id),
             PublicKey = Convert.ToBase64String(result.PublicKey),
             SignatureCounter = result.SignCount,
-            CredentialType = UserPasskeyCredentialType.PublicKey, 
+            CredentialType = UserPasskeyCredentialType.PublicKey,
             Aaguid = result.AaGuid.ToString(),
             PrfEnabled = attestation.ClientExtensionResults?.PRF?.Enabled ?? false,
             PrfFirst = attestation.ClientExtensionResults?.PRF?.Results?.First != null ? Convert.ToBase64String(attestation.ClientExtensionResults.PRF.Results.First) : null,
             PrfSecond = attestation.ClientExtensionResults?.PRF?.Results?.Second != null ? Convert.ToBase64String(attestation.ClientExtensionResults.PRF.Results.Second) : null,
             CreatedAt = DateTime.UtcNow,
             LastUsedAt = DateTime.UtcNow,
-            DisplayName = "Passkey" 
+            DisplayName = "Passkey"
         };
 
         await _passkeyRepository.AddAsync(newPasskey);
     }
 
-    public async Task<AssertionOptions> GetLoginOptionsAsync(User user)
+    public async Task<AssertionOptions?> GetLoginOptionsAsync(User user)
     {
         var existingKeys = (await _passkeyRepository.GetByUserIdAsync(user.Id))
             .Select(k => new PublicKeyCredentialDescriptor(Convert.FromBase64String(k.CredentialId)))
@@ -103,7 +102,7 @@ public class PasskeyService : IPasskeyService
 
         if (!existingKeys.Any())
         {
-            throw new Exception("No passkeys found for this user.");
+            return null;
         }
 
         var options = _fido2.GetAssertionOptions(new GetAssertionOptionsParams
@@ -129,8 +128,8 @@ public class PasskeyService : IPasskeyService
     {
         // 1. Get the credential from DB
         // assertion.RawId is usually the credential ID
-        var passkey = await _passkeyRepository.GetByCredentialIdAsync(Convert.ToBase64String(assertion.RawId)); 
-        
+        var passkey = await _passkeyRepository.GetByCredentialIdAsync(Convert.ToBase64String(assertion.RawId));
+
         if (passkey == null || passkey.UserId != user.Id)
         {
             return false;
@@ -145,7 +144,7 @@ public class PasskeyService : IPasskeyService
             StoredSignatureCounter = passkey.SignatureCounter,
             IsUserHandleOwnerOfCredentialIdCallback = (args, cancellationToken) =>
             {
-                return Task.FromResult(true); 
+                return Task.FromResult(true);
             }
         }, CancellationToken.None);
 
