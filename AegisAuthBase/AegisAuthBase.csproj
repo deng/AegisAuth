@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>AegisAuthBase</PackageId>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Authors>AegisConsole Team</Authors>
     <Company>AegisConsole</Company>
     <Description>Core library for AegisAuth, providing entities, repositories, and services for authentication and security.</Description>

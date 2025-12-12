@@ -1,6 +1,6 @@
 # AegisAuth
 
-一个功能全面的 .NET 认证解决方案，提供 JWT 和 Session 两种认证方式，支持令牌黑名单和安全审计日志功能。
+一个功能全面的 .NET 认证解决方案，提供 JWT 和 Session 两种认证方式，支持令牌黑名单、安全审计日志、WebAuthn 双因素认证和数字签名功能。
 
 ## 项目结构
 
@@ -9,6 +9,8 @@
 - **AegisAuthSession** - Session 认证库
 - **AegisAuthJwtTest** - JWT 测试项目
 - **AegisAuthSessionTest** - Session 测试项目
+- **AegisAuthJwtDemo** - JWT + WebAuthn 完整演示项目
+- **AegisAuth.WebAuthnDemo** - WebAuthn 演示项目
 
 ## 特性
 
@@ -18,12 +20,17 @@
 - 🔒 **账户锁定**：5 次失败尝试后锁定 30 分钟
 - 🌐 **ASP.NET Core 集成**：无缝集成到 ASP.NET Core 应用
 - 🎯 **即用控制器**：内置控制器可直接使用
+- 🔐 **WebAuthn 双因素认证**：支持 FIDO2 标准的安全认证
+- 🗝️ **通行密钥支持**：无密码认证体验
+- ✍️ **数字签名**：基于 WebAuthn 的数据签名功能
 
 ### AegisAuthJwt 特性
 - 🔐 **JWT 认证**：标准 JWT 令牌认证
 - 🚫 **令牌黑名单**：自动令牌失效机制
 - 🔄 **令牌刷新**：自动续期支持
 - 🧹 **自动清理**：后台清理过期令牌
+- 🗝️ **通行密钥集成**：JWT + WebAuthn 双因素认证
+- ✍️ **凭据存储**：安全存储 WebAuthn 凭据用于签名验证
 
 ### AegisAuthSession 特性
 - 🔑 **Session 认证**：基于 Session ID 的认证
@@ -33,6 +40,31 @@
 - 🛡️ **Session 固定攻击保护**：防止 Session 劫持
 - 🧹 **后台清理**：定期清理过期 Session
 - 📱 **多设备管理**：限制每用户最大 Session 数
+
+## 演示项目
+
+### AegisAuthJwtDemo（JWT + WebAuthn 完整演示）
+
+一个完整的演示项目，展示了如何在 ASP.NET Core 应用中集成 JWT 认证和 WebAuthn 双因素认证。
+
+**特性：**
+- 🔐 JWT 令牌认证
+- 🗝️ 通行密钥注册和认证
+- ✍️ 数字签名功能
+- 🔒 客户端私钥加密存储
+- 🌐 完整的 Web 前端界面
+
+**运行演示：**
+```bash
+cd AegisAuthJwtDemo
+dotnet run
+```
+
+然后在浏览器中访问 `https://localhost:5001` 查看演示。
+
+### AegisAuth.WebAuthnDemo（WebAuthn 演示）
+
+专注于 WebAuthn 功能的演示项目。
 
 ## 快速开始
 
@@ -171,6 +203,42 @@ app.UseAegisAuthSession();
 }
 ```
 
+## WebAuthn 和通行密钥
+
+### 技术概述
+
+AegisAuth 集成了 WebAuthn (Web Authentication) 标准，支持 FIDO2 认证器，提供无密码的双因素认证体验。
+
+**核心特性：**
+- 🔐 **FIDO2 标准兼容**：支持所有 FIDO2 认证器
+- 🗝️ **通行密钥**：无密码认证体验
+- ✍️ **数字签名**：使用 WebAuthn 凭据进行数据签名
+- 🔒 **客户端加密**：私钥使用 PRF 扩展加密存储在 localStorage
+- ⚡ **性能优化**：客户端提供凭据 ID，避免服务器端解析开销
+
+### 认证流程
+
+1. **注册通行密钥**：
+   - 客户端生成 ECDSA 密钥对
+   - 公钥发送到服务器存储
+   - 私钥使用 PRF 扩展加密后存储在客户端
+
+2. **双因素认证**：
+   - 用户提供用户名/密码
+   - 客户端使用私钥签名认证挑战
+   - 服务器验证签名完成认证
+
+3. **数字签名**：
+   - 客户端使用私钥对数据进行签名
+   - 服务器使用存储的公钥验证签名
+
+### 安全特性
+
+- **零知识证明**：私钥永不离开客户端
+- **防重放攻击**：每次认证使用唯一挑战
+- **凭据隔离**：每个网站使用独立的凭据
+- **审计日志**：记录所有认证和签名事件
+
 ## 数据模型
 
 ### 核心实体（AegisAuthBase）
@@ -244,6 +312,25 @@ public class Session
 }
 ```
 
+### WebAuthn 特有实体
+
+#### WebAuthnCredential（WebAuthn 凭据）
+```csharp
+public class WebAuthnCredential
+{
+    public string Id { get; set; }
+    public string UserId { get; set; }
+    public string CredentialId { get; set; }
+    public byte[] PublicKey { get; set; }
+    public string UserHandle { get; set; }
+    public uint SignatureCounter { get; set; }
+    public string CredType { get; set; }
+    public string RegDate { get; set; }
+    public Guid AaGuid { get; set; }
+    public string? FriendlyName { get; set; }
+}
+```
+
 ### 仓储接口
 
 您需要实现以下仓储接口：
@@ -254,6 +341,7 @@ public class Session
 
 **AegisAuthJwt 额外需要：**
 - `ITokenBlacklistRepository`
+- `IWebAuthnCredentialRepository`（用于通行密钥和数字签名功能）
 
 **AegisAuthSession 不需要额外仓储**（使用 `ISessionStore`）
 
@@ -282,6 +370,14 @@ public class Session
 - ✅ IP 地址追踪
 - ✅ User-Agent 记录
 - ✅ 事件类型分类
+
+### WebAuthn 安全
+- ✅ FIDO2 标准兼容
+- ✅ 公钥认证（私钥不离开客户端）
+- ✅ 防重放攻击（唯一挑战）
+- ✅ 凭据隔离（按域名）
+- ✅ 数字签名验证
+- ✅ 客户端私钥加密存储
 
 ## 配置示例
 
@@ -323,6 +419,23 @@ public class Session
 }
 ```
 
+### WebAuthn 配置（appsettings.json）
+```json
+{
+  "WebAuthn": {
+    "ServerName": "Your App Name",
+    "ServerDomain": "localhost",
+    "Origins": ["https://localhost:5001"],
+    "Timeout": 60000
+  },
+  "AuthSetting": {
+    "EnableWebAuthn": true,
+    "EnablePasskeyRegistration": true,
+    "EnableDigitalSignatures": true
+  }
+}
+```
+
 ## 文档
 
 ### AegisAuthJwt
@@ -331,6 +444,10 @@ public class Session
 ### AegisAuthSession
 - [快速开始](AegisAuthSession/QUICKSTART.md)
 - [存储实现指南](AegisAuthSession/STORAGE_GUIDE.md)
+
+### WebAuthn 和通行密钥
+- [WebAuthn 集成指南](AegisAuthJwtDemo/README.md)
+- [数字签名使用指南](AegisAuthJwtDemo/README.md#数字签名)
 
 ## 测试项目
 

@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>AegisAuthJwt</PackageId>
-    <Version>1.0.6</Version>
+    <Version>1.0.7</Version>
     <Authors>AegisConsole Team</Authors>
     <Company>AegisConsole</Company>
     <Description>A comprehensive JWT authentication library with token blacklisting and security audit logging for ASP.NET Core applications.</Description>

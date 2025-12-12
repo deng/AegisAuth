@@ -1,6 +1,6 @@
-# AegisAuth
+# AegisAuthJwt
 
-一个功能全面的 .NET 认证解决方案，提供 JWT 和 Session 两种认证方式，支持令牌黑名单和安全审计日志功能。
+JWT 认证库，提供完整的 JWT 令牌认证功能，支持令牌黑名单、自动清理、WebAuthn 双因素认证和数字签名功能。
 
 ## 项目结构
 
@@ -24,6 +24,9 @@
 - 🚫 **令牌黑名单**：自动令牌失效机制
 - 🔄 **令牌刷新**：自动续期支持
 - 🧹 **自动清理**：后台清理过期令牌
+- 🗝️ **通行密钥集成**：JWT + WebAuthn 双因素认证
+- ✍️ **数字签名**：基于 WebAuthn 的数据签名功能
+- 🔒 **凭据存储**：安全存储 WebAuthn 凭据用于签名验证
 
 ### AegisAuthSession 特性
 - 🔑 **Session 认证**：基于 Session ID 的认证
@@ -59,6 +62,15 @@ builder.Services.AddScoped<AuthManager>();
 // 配置 JWT 中间件
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(/* 配置选项 */);
+
+// 可选：配置 WebAuthn 双因素认证
+builder.Services.AddScoped<IWebAuthnCredentialRepository, YourWebAuthnCredentialRepository>();
+builder.Services.AddFido2(options =>
+{
+    options.ServerName = "Your App Name";
+    options.ServerDomain = "yourdomain.com";
+    options.Origins = new HashSet<string> { "https://yourdomain.com" };
+});
 ```
 
 ### AegisAuthSession（Session 认证）
@@ -136,6 +148,9 @@ app.UseAegisAuthSession();
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | POST | `/api/auth/refresh` | 刷新 Token | ❌ |
+| POST | `/api/auth/register-passkey` | 注册通行密钥 | ✅ |
+| POST | `/api/auth/verify-two-factor` | 双因素认证验证 | ❌ |
+| POST | `/api/auth/sign-data` | 数字签名 | ✅ |
 
 ### AegisAuthSession 特有端点
 
@@ -226,6 +241,23 @@ public class TokenBlacklist
 }
 ```
 
+#### WebAuthnCredential（WebAuthn 凭据）
+```csharp
+public class WebAuthnCredential
+{
+    public string Id { get; set; }
+    public string UserId { get; set; }
+    public string CredentialId { get; set; }
+    public byte[] PublicKey { get; set; }
+    public string UserHandle { get; set; }
+    public uint SignatureCounter { get; set; }
+    public string CredType { get; set; }
+    public string RegDate { get; set; }
+    public Guid AaGuid { get; set; }
+    public string? FriendlyName { get; set; }
+}
+```
+
 ### Session 特有实体
 
 #### Session（会话）
@@ -254,6 +286,7 @@ public class Session
 
 **AegisAuthJwt 额外需要：**
 - `ITokenBlacklistRepository`
+- `IWebAuthnCredentialRepository`（用于通行密钥和数字签名功能）
 
 **AegisAuthSession 不需要额外仓储**（使用 `ISessionStore`）
 
@@ -270,6 +303,14 @@ public class Session
 - ✅ 账户锁定（30 分钟）
 - ✅ 密码修改追踪
 - ✅ 账户激活状态
+
+### WebAuthn 安全
+- ✅ FIDO2 标准兼容
+- ✅ 公钥认证（私钥不离开客户端）
+- ✅ 防重放攻击（唯一挑战）
+- ✅ 凭据隔离（按域名）
+- ✅ 数字签名验证
+- ✅ 客户端私钥加密存储
 
 ### 会话安全（AegisAuthSession）
 - ✅ Session 固定攻击保护
@@ -298,6 +339,23 @@ public class Session
   "TokenCleanupWorker": {
     "Enabled": true,
     "CleanupIntervalHours": 24
+  }
+}
+```
+
+### WebAuthn 配置（appsettings.json）
+```json
+{
+  "WebAuthn": {
+    "ServerName": "Your App Name",
+    "ServerDomain": "localhost",
+    "Origins": ["https://localhost:5001"],
+    "Timeout": 60000
+  },
+  "AuthSetting": {
+    "EnableWebAuthn": true,
+    "EnablePasskeyRegistration": true,
+    "EnableDigitalSignatures": true
   }
 }
 ```
