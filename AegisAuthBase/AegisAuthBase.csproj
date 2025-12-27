@@ -5,10 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>AegisAuthBase</PackageId>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Authors>AegisConsole Team</Authors>
     <Company>AegisConsole</Company>
-    <Description>Core library for AegisAuth, providing entities, repositories, and services for authentication and security.</Description>
+    <Description>Core library for AegisAuth, providing entities, repositories, services, and middleware for authentication and security.</Description>
     <PackageTags>authentication;security;core;entities;repositories</PackageTags>
     <RepositoryUrl>https://github.com/dengzhizhong/AegisAuth</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

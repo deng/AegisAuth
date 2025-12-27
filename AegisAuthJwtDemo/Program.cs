@@ -51,8 +51,8 @@ builder.Services.AddSingleton<ITwoFactorStore, InMemoryTwoFactorStore>();
 var authSetting = new AuthSetting
 {
     JwtTokenKey = "your-256-bit-secret-key-here-make-it-long-enough-for-demo-purposes-123456789",
-    JwtTokenIssuer = "https://localhost:5001",
-    JwtTokenAudience = "https://localhost:5001",
+    JwtTokenIssuer = "https://arundinaceous-wider-jadiel.ngrok-free.dev",
+    JwtTokenAudience = "https://arundinaceous-wider-jadiel.ngrok-free.dev",
     AccessTokenExpirationMinutes = 60,
     RefreshTokenExpirationDays = 7
 };
@@ -62,8 +62,10 @@ builder.Services.AddSingleton(authSetting);
 var passkeySettings = new PasskeySettings
 {
     ServerDomain = "localhost",
+    //ServerDomain = "arundinaceous-wider-jadiel.ngrok-free.dev",
     ServerName = "JWT WebAuthn Demo",
-    Origins = new HashSet<string> { "https://localhost:7122", "http://localhost:5203", "http://localhost:5187" }
+    Origins = new HashSet<string> { "https://arundinaceous-wider-jadiel.ngrok-free.dev" }
+    //Origins = new HashSet<string> { "https://arundinaceous-wider-jadiel.ngrok-free.dev" }
 };
 builder.Services.AddSingleton(passkeySettings);
 
@@ -144,7 +146,17 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
-app.UseStaticFiles();
+
+// Configure static files to serve apple-app-site-association without extension
+var fileExtensionContentTypeProvider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+fileExtensionContentTypeProvider.Mappings[""] = "application/json";
+app.UseStaticFiles(new StaticFileOptions
+{
+    ContentTypeProvider = fileExtensionContentTypeProvider,
+    ServeUnknownFileTypes = true,
+    DefaultContentType = "application/json"
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -402,7 +402,7 @@ public class AuthManager : ITwoFactorService, IPasskeyAuthService
         await m_TwoFactorStore.RemoveCodeAsync(request.TwoFactorId);
 
         // 5. 生成 Token
-        var token = GenerateJwtToken(user);
+        var token = GenerateJwtToken(user, new List<Claim> { new Claim("TwoFactorVerified", "true") });
         var refreshToken = GenerateRefreshToken(user);
 
         return new ApiResponse<SignedInUser>
@@ -842,7 +842,7 @@ public class AuthManager : ITwoFactorService, IPasskeyAuthService
         return await m_TokenBlacklistRepository.GetValidTokenHashesAsync();
     }
 
-    private string GenerateJwtToken(User user)
+    private string GenerateJwtToken(User user, List<Claim>? additionalClaims = null)
     {
         var jwtTokenKey = m_AuthSetting.JwtTokenKey;
         var jwtTokenIssuer = m_AuthSetting.JwtTokenIssuer;
@@ -860,6 +860,12 @@ public class AuthManager : ITwoFactorService, IPasskeyAuthService
 
         // 添加角色声明
         claims.Add(new Claim(ClaimTypes.Role, user.Role.ToString()));
+
+        // 添加额外的声明
+        if (additionalClaims != null)
+        {
+            claims.AddRange(additionalClaims);
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwtTokenIssuer,
